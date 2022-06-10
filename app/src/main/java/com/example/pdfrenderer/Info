@@ -1,0 +1,45 @@
+Android-Lollipop (API 21)
+Класс PdfRenderer не является потокобезопасным
+Если мы хотим визуализировать PDF, нам сначала нужно получить ParcelFileDescriptor                  https://stackoverflow.com/questions/6715898/what-is-parcelfiledescriptor-in-android
+из файла, а затем создать экземпляр средства визуализации
+
+1) Получить дескриптор файла для поиска из вашего документа pdf:
+    ParcelFileDescriptor fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+2) Создать PdfRenderer
+    PdfRenderer renderer = new PdfRenderer(fd);
+3) Подготовить растровое изображение
+    Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_4444);
+4) Получить PdfRenderer.Page для рендеринга
+    PdfRenderer.Page page = renderer.openPage(pageIndex);
+5) Отобразить страницу на подготовленном растровом изображении
+    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+
+    render() - первый параметр - битмап, второй и третий - клип и трансформация, 4 - render mode    ** Клип(Rect) и трансформация(Matrix) полезны для реализации мозаичного рендеринга,
+    render mode: RENDER_MODE_FOR_DISPLAY(нужен нам)  RENDER_MODE_FOR_PRINT(для печати?)             когда целевое растровое изображение содержит часть изображения, например,
+                                                                                                    при масштабировании **
+
+
+
+
+
+- Мы несем ответственность за закрытие renderer каждой страницы, которую мы открываем.              https://proandroiddev.com/rendering-pdfs-on-android-the-easy-way-c05635b2c3a8
+- У нас может быть открыта только одна страница в любой момент времени.
+- Текущая страница должна быть закрыта, прежде чем мы сможем закрыть файл renderer
+Bitmap.Config.ARGB_8888 - единственный конфиг для bitmap при работе с PdfRenderer
+
+Когда мы имеем дело с файлами и Bitmap, обычно рекомендуется переложить работу на фоновый поток.    ВАЖНО
+
+val canvas = Canvas(bitmap)
+canvas.drawColor(Color.WHITE)
+canvas.drawBitmap(bitmap, 0f, 0f, null) если pdf прозрачен
+
+Нельзя использовать разные потоки для отображения страниц, так как в одно время может
+существовать только одна страница, следующая может появиться только после закрытия предыдущей
+
+PdfRenderer не должен быть полноценным решением для PDF.
+Это будет хорошо работать в простых случаях. Если вам нужно охватить более сложные случаи,
+этого вам, вероятно, будет недостаточно. Например, он не поддерживает аннотациии имеет проблемы
+с защищенными паролем и поврежденными файлами.
+
+Вторая проблема исправлена в последних версиях Android, я думаю, но более ранние версии
+все еще затронуты.
